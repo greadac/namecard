@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1240e0">
+<title>명함 → 주소록</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:light dark;
+  --bg:light-dark(#f4f6fb,#0a0d18);--card:light-dark(#fff,#141a2c);--ink:light-dark(#111,#eef1f8);
+  --mute:light-dark(#5b6275,#9aa3b8);--line:light-dark(#dfe3ee,#262f47);--blue:#1240e0;--blue2:light-dark(#eef2ff,#16204a);
+  --ok:#0a8f5a;--warn:#c2410c}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Noto Sans KR",system-ui,sans-serif;overflow-x:clip;
+  padding-bottom:env(safe-area-inset-bottom)}
+header{background:var(--blue);color:#fff;padding:calc(14px + env(safe-area-inset-top)) 18px 14px}
+header h1{margin:0;font-size:20px;font-weight:700}
+header p{margin:2px 0 0;font-size:13px;opacity:.85}
+main{max-width:560px;margin:0 auto;padding:16px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.shot{display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.prev{width:100%;aspect-ratio:1.75;border:2px dashed var(--line);border-radius:12px;display:grid;place-items:center;
+  overflow:hidden;background:var(--blue2);color:var(--mute);font-size:14px}
+.prev canvas{width:100%;height:100%;object-fit:contain}
+.row{display:flex;gap:8px;flex-wrap:wrap;width:100%}
+.btn{flex:1;min-height:48px;border:0;border-radius:12px;font:inherit;font-weight:700;cursor:pointer;
+  background:var(--blue);color:#fff;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn.sub{background:var(--blue2);color:light-dark(var(--blue),#c9d4ff)}
+.btn.ok{background:var(--ok)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #ffe600;outline-offset:2px}
+label.btn input{display:none}
+.bar{width:100%;height:8px;border-radius:8px;background:var(--line);overflow:hidden;display:none}
+.bar i{display:block;height:100%;width:0;background:var(--blue);transition:width .2s}
+.st{font-size:14px;color:var(--mute);min-height:1.4em;margin:0}
+h2{font-size:17px;margin:0 0 10px}
+.f{display:grid;grid-template-columns:76px minmax(0,1fr);gap:8px;align-items:center;margin-bottom:8px}
+.f span{font-size:14px;color:var(--mute)}
+input,textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;min-height:44px}
+textarea{min-height:80px;resize:vertical}
+details{margin-top:6px}summary{cursor:pointer;color:var(--mute);font-size:14px;padding:6px 0}
+pre{white-space:pre-wrap;font-size:13px;background:var(--bg);border-radius:10px;padding:10px;margin:6px 0 0;max-height:200px;overflow:auto}
+.hist li{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid var(--line);font-size:15px}
+.hist ul{list-style:none;margin:0;padding:0}
+.hist small{color:var(--mute)}
+.hist button{border:0;background:none;color:var(--blue);font:inherit;font-size:14px;cursor:pointer;min-height:36px}
+.empty{color:var(--mute);font-size:14px;margin:0}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(120px);
+  background:#111;color:#fff;padding:12px 18px;border-radius:12px;font-size:15px;transition:transform .25s;z-index:9;max-width:90vw}
+.toast.on{transform:translateX(-50%) translateY(0)}
+footer{text-align:center;font-size:13px;color:var(--mute);padding:8px 0 24px}
+@media(prefers-reduced-motion:reduce){.toast,.bar i{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>명함 → 주소록</h1>
+  <p>명함을 찍으면 글자를 읽어 연락처로 저장합니다</p>
+</header>
+<main>
+  <section class="box shot">
+    <div class="prev" id="prev">명함을 가로로 꽉 차게 찍어 주세요</div>
+    <div class="row">
+      <label class="btn">📷 명함 촬영<input type="file" id="cam" accept="image/*" capture="environment"></label>
+      <label class="btn sub">사진 선택<input type="file" id="gal" accept="image/*"></label>
+    </div>
+    <div class="row">
+      <button class="btn sub" id="rot" disabled>↻ 90° 회전</button>
+      <button class="btn sub" id="again" disabled>다시 읽기</button>
+    </div>
+    <div class="bar" id="bar"><i></i></div>
+    <p class="st" id="st">처음 한 번은 한글 인식 데이터를 내려받느라 시간이 조금 걸립니다.</p>
+  </section>
+
+  <form class="box" id="form" autocomplete="off">
+    <h2>연락처 확인·수정</h2>
+    <div class="f"><span>이름</span><input id="name" placeholder="홍길동"></div>
+    <div class="f"><span>회사</span><input id="org" placeholder="회사·기관명"></div>
+    <div class="f"><span>부서</span><input id="dept" placeholder="부서"></div>
+    <div class="f"><span>직함</span><input id="title" placeholder="직함"></div>
+    <div class="f"><span>휴대폰</span><input id="cell" type="tel" placeholder="010-0000-0000"></div>
+    <div class="f"><span>회사전화</span><input id="work" type="tel"></div>
+    <div class="f"><span>팩스</span><input id="fax" type="tel"></div>
+    <div class="f"><span>이메일</span><input id="email" type="email" inputmode="email"></div>
+    <div class="f"><span>홈페이지</span><input id="url" inputmode="url"></div>
+    <div class="f"><span>주소</span><input id="adr"></div>
+    <div class="f"><span>메모</span><textarea id="note" placeholder="만난 곳, 날짜 등"></textarea></div>
+    <div class="row">
+      <button type="submit" class="btn ok" id="save">주소록에 저장</button>
+      <button type="button" class="btn sub" id="clear">비우기</button>
+    </div>
+    <details><summary>인식된 원문 보기</summary><pre id="raw">(아직 없음)</pre></details>
+  </form>
+
+  <section class="box hist">
+    <h2>최근 저장한 명함</h2>
+    <ul id="hist"></ul>
+    <p class="empty" id="empty">아직 저장한 명함이 없습니다.</p>
+    <div class="row" style="margin-top:10px"><button class="btn sub" id="all" disabled>전체를 한 파일로 저장</button></div>
+  </section>
+
+  <footer>제작자 인스타 &nbsp;@greada_2</footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script>
+{
+const $ = id => document.getElementById(id);
+const F = ['name','org','dept','title','cell','work','fax','email','url','adr','note'];
+let img = null, angle = 0, worker = null, canvas = null;
+
+const toast = m => { const t=$('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('on'),2600); };
+const status = (m, p) => { $('st').textContent=m; const b=$('bar'); if(p==null){b.style.display='none';return;} b.style.display='block'; b.firstElementChild.style.width=Math.round(p*100)+'%'; };
+
+/* ---------- 이미지 준비 ---------- */
+function loadFile(file){
+  if(!file) return;
+  const u = URL.createObjectURL(file), im = new Image();
+  im.onload = () => { img = im; angle = 0; draw(); $('rot').disabled=$('again').disabled=false; run(); };
+  im.onerror = () => toast('사진을 열 수 없습니다');
+  im.src = u;
+}
+function draw(){
+  const max = 2000, s = Math.min(1, max/Math.max(img.width,img.height));
+  const w = img.width*s, h = img.height*s, r = angle%180 !== 0;
+  canvas = document.createElement('canvas');
+  canvas.width = r?h:w; canvas.height = r?w:h;
+  const c = canvas.getContext('2d');
+  c.translate(canvas.width/2, canvas.height/2); c.rotate(angle*Math.PI/180);
+  c.drawImage(img, -w/2, -h/2, w, h);
+  // 흑백 + 대비 강화 (인식률 향상)
+  const d = c.getImageData(0,0,canvas.width,canvas.height), p = d.data;
+  for(let i=0;i<p.length;i+=4){
+    let g = .299*p[i]+.587*p[i+1]+.114*p[i+2];
+    g = Math.max(0, Math.min(255, (g-128)*1.5+128));
+    p[i]=p[i+1]=p[i+2]=g;
+  }
+  c.setTransform(1,0,0,1,0,0); c.putImageData(d,0,0);
+  const pv = $('prev'); pv.innerHTML=''; pv.style.borderStyle='solid'; pv.appendChild(canvas);
+}
+
+/* ---------- 글자 인식 ---------- */
+async function run(){
+  if(!canvas) return;
+  if(typeof Tesseract === 'undefined'){ status('인식 엔진을 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'); return; }
+  $('again').disabled = $('rot').disabled = true;
+  try{
+    if(!worker){
+      status('한글 인식 준비 중…', 0);
+      worker = await Tesseract.createWorker('kor+eng', 1, { logger: m => {
+        if(m.status==='recognizing text') status('글자 읽는 중…', m.progress);
+        else if(m.progress!=null) status('한글 인식 준비 중…', m.progress);
+      }});
+    }
+    status('글자 읽는 중…', 0);
+    const { data:{ text } } = await worker.recognize(canvas);
+    $('raw').textContent = text.trim() || '(읽은 글자 없음)';
+    fill(parse(text));
+    status('다 읽었습니다. 틀린 곳을 고친 뒤 저장하세요.');
+  }catch(e){ console.error(e); status('인식 중 오류가 났습니다. 다시 읽기를 눌러 주세요.'); }
+  $('again').disabled = $('rot').disabled = false;
+}
+
+/* ---------- 명함 글 분석 ---------- */
+const TITLES = /(대표이사|대표|회장|사장|부사장|전무|상무|이사|본부장|센터장|원장|부원장|실장|국장|부장|차장|과장|팀장|파트장|대리|주임|사원|연구원|선임|책임|수석|소장|교수|강사|교사|팀원|매니저|컨설턴트|디자이너|간사|사무국장|위원|신부|수녀|목사|CEO|CTO|CFO|COO|Manager|Director|President|Engineer|Designer|Consultant)/i;
+const ORGS = /(\(주\)|㈜|주식회사|유한회사|\(유\)|재단|법인|협회|학원|학교|대학교?|센터|연구소|병원|의원|약국|은행|공사|공단|그룹|컴퍼니|스튜디오|교회|성당|교구|Co\.|Corp|Inc|Ltd|LLC|Company|Group|Studio)/i;
+const DEPTS = /(부$|팀$|과$|실$|본부|사업부|사업단|지점|지사|센터$|부서)/;
+const ADDR = /(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주|충청|전라|경상)|(\S+(시|군|구)\s+\S+(로|길|동|읍|면))/;
+const PHONE = /(?:\+?82[\s.-]?0?|0)\d{1,2}[\s.)-]*\d{3,4}[\s.-]*\d{4}/g;
+
+function normPhone(s){
+  let d = s.replace(/[^\d+]/g,'').replace(/^\+?820?/,'0');
+  if(/^02/.test(d)) return d.replace(/^(02)(\d{3,4})(\d{4})$/,'$1-$2-$3');
+  return d.replace(/^(0\d{2})(\d{3,4})(\d{4})$/,'$1-$2-$3');
+}
+function parse(text){
+  const r = Object.fromEntries(F.map(k=>[k,'']));
+  let lines = text.split(/\n/).map(l=>l.replace(/[|_~`]/g,' ').replace(/\s+/g,' ').trim()).filter(l=>l.length>1);
+  const used = new Set();
+
+  // 이메일·홈페이지
+  lines.forEach((l,i)=>{
+    const em = l.replace(/\s/g,'').match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/);
+    if(em && !r.email){ r.email = em[0].replace(/^(e-?mail|이메일)[:.]?/i,''); used.add(i); }
+    const ur = l.replace(/\s/g,'').match(/((https?:\/\/)?(www\.)[\w.-]+\.[a-z]{2,}[\/\w.-]*)|(https?:\/\/[\w.-]+\.[a-z]{2,}[\/\w.-]*)/i);
+    if(ur && !r.url){ r.url = ur[0]; used.add(i); }
+  });
+  // 전화
+  lines.forEach((l,i)=>{
+    const m = l.match(PHONE); if(!m) return;
+    m.forEach(num=>{
+      const n = normPhone(num), idx = l.indexOf(num), before = l.slice(Math.max(0,idx-12), idx);
+      if(/^01[016789]/.test(n.replace(/-/g,''))){ if(!r.cell) r.cell = n; }
+      else if(/(F|Fax|팩스|팩)\s*[.:)]?\s*$/i.test(before)){ if(!r.fax) r.fax = n; }
+      else if(!r.work) r.work = n;
+      else if(!r.fax && /fax|팩스|F\b/i.test(l)) r.fax = n;
+    });
+    used.add(i);
+  });
+  // 주소
+  lines.forEach((l,i)=>{
+    if(used.has(i) || r.adr) return;
+    if(ADDR.test(l) && /\d/.test(l) && l.length>8){
+      r.adr = l.replace(/^(주소|Add(ress)?|A)\s*[.:)]?\s*/i,'');
+      used.add(i);
+      const nx = lines[i+1];
+      if(nx && !used.has(i+1) && /(\d+층|\d+호|빌딩|타워|센터|\(.+동\))/.test(nx) && nx.length<30){ r.adr += ' '+nx; used.add(i+1); }
+    }
+  });
+  // 회사
+  lines.forEach((l,i)=>{ if(!used.has(i) && !r.org && ORGS.test(l) && l.length<40){ r.org = l; used.add(i); } });
+  // 이름 + 직함 (예: "홍길동 과장", "과장 홍 길 동")
+  lines.forEach((l,i)=>{
+    if(used.has(i) || r.name) return;
+    const t = l.match(TITLES);
+    const rest = (t ? l.replace(t[0],' ') : l).replace(/[^가-힣\s]/g,' ').trim();
+    const compact = rest.replace(/\s+/g,'');
+    if(/^[가-힣]{2,4}$/.test(compact) && (t || /^[가-힣](\s?[가-힣]){1,3}$/.test(rest))){
+      r.name = compact; if(t && !r.title) r.title = t[0]; used.add(i);
+    }
+  });
+  // 직함·부서 (따로 있는 줄)
+  lines.forEach((l,i)=>{
+    if(used.has(i)) return;
+    if(!r.title && TITLES.test(l) && l.length<25){
+      const t = l.match(TITLES)[0]; r.title = t;
+      const d = l.replace(t,'').replace(/[|/·]/g,' ').trim();
+      if(d && !r.dept && d.length>1) r.dept = d;
+      used.add(i);
+    } else if(!r.dept && DEPTS.test(l) && /[가-힣]/.test(l) && l.length<20){ r.dept = l; used.add(i); }
+  });
+  // 회사 줄 끝의 부서 분리 (예: "ABC 주식회사 영업부")
+  if(r.org && !r.dept){ const m = r.org.match(/^(.+?)\s+([가-힣]+(부|팀|실|과|본부|사업부))$/); if(m && ORGS.test(m[1])){ r.org=m[1]; r.dept=m[2]; } }
+  // 영문 이름 대비: 회사가 없으면 남은 첫 긴 줄
+  if(!r.org){ const i = lines.findIndex((l,j)=>!used.has(j) && /[가-힣A-Za-z]{2,}/.test(l) && l.length<30); if(i>-1){ r.org = lines[i]; used.add(i); } }
+  if(!r.name){ const i = lines.findIndex((l,j)=>!used.has(j) && /^[A-Z][a-z]+\s[A-Z][a-z]+$/.test(l)); if(i>-1) r.name = lines[i]; }
+  return r;
+}
+function fill(r){ F.forEach(k=>{ if(k!=='note') $(k).value = r[k]||''; }); }
+function read(){ return Object.fromEntries(F.map(k=>[k,$(k).value.trim()])); }
+
+/* ---------- vCard ---------- */
+const esc = s => (s||'').replace(/\\/g,'\\\\').replace(/\n/g,'\\n').replace(/([,;])/g,'\\$1');
+function vcard(c){
+  const ko = /^[가-힣]{2,4}$/.test(c.name);
+  let fam='', giv=c.name;
+  if(ko){ fam=c.name[0]; giv=c.name.slice(1); }
+  else if(c.name.includes(' ')){ const p=c.name.split(' '); fam=p.pop(); giv=p.join(' '); }
+  const L = ['BEGIN:VCARD','VERSION:3.0',
+    `N:${esc(fam)};${esc(giv)};;;`, `FN:${esc(c.name || c.org || '이름 없음')}`];
+  if(c.org||c.dept) L.push(`ORG:${esc(c.org)}${c.dept?';'+esc(c.dept):''}`);
+  if(c.title) L.push(`TITLE:${esc(c.title)}`);
+  if(c.cell) L.push(`TEL;TYPE=CELL:${c.cell}`);
+  if(c.work) L.push(`TEL;TYPE=WORK,VOICE:${c.work}`);
+  if(c.fax)  L.push(`TEL;TYPE=WORK,FAX:${c.fax}`);
+  if(c.email) L.push(`EMAIL;TYPE=INTERNET,WORK:${c.email}`);
+  if(c.url) L.push(`URL:${c.url}`);
+  if(c.adr) L.push(`ADR;TYPE=WORK:;;${esc(c.adr)};;;;`);
+  const memo = [c.note, '명함 등록 '+new Date().toLocaleDateString('ko-KR')].filter(Boolean).join('\n');
+  L.push(`NOTE:${esc(memo)}`, 'END:VCARD');
+  return L.join('\r\n');
+}
+async function deliver(text, fname){
+  const file = new File([text], fname, { type:'text/vcard' });
+  // 휴대폰: 공유 시트 → '연락처' 앱으로 바로 등록
+  if(navigator.canShare && navigator.canShare({ files:[file] })){
+    try{ await navigator.share({ files:[file], title:fname }); return true; }
+    catch(e){ if(e.name==='AbortError') return false; }
+  }
+  // 그 외: .vcf 파일 내려받기 → 열면 주소록 추가 화면
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  return true;
+}
+
+/* ---------- 저장 기록 ---------- */
+const KEY = 'namecard-history';
+const hist = () => { try{ return JSON.parse(localStorage.getItem(KEY))||[]; }catch{ return []; } };
+const setHist = h => { try{ localStorage.setItem(KEY, JSON.stringify(h.slice(0,100))); }catch{} renderHist(); };
+function renderHist(){
+  const h = hist();
+  $('empty').style.display = h.length?'none':'block';
+  $('all').disabled = !h.length;
+  $('hist').innerHTML = h.map((c,i)=>`<li><div><b>${c.name||'(이름 없음)'}</b> <small>${[c.org,c.title].filter(Boolean).join(' · ')}</small><br><small>${c.cell||c.work||c.email||''}</small></div>
+    <div><button data-r="${i}">다시 저장</button><button data-d="${i}">삭제</button></div></li>`).join('');
+}
+$('hist').addEventListener('click', e=>{
+  const h = hist(), r = e.target.dataset.r, d = e.target.dataset.d;
+  if(r!=null) deliver(vcard(h[r]), (h[r].name||'contact')+'.vcf');
+  if(d!=null){ h.splice(d,1); setHist(h); }
+});
+$('all').onclick = () => { const h = hist(); deliver(h.map(vcard).join('\r\n'), `명함_${h.length}명.vcf`); };
+
+/* ---------- 이벤트 ---------- */
+$('cam').onchange = e => { loadFile(e.target.files[0]); e.target.value=''; };
+$('gal').onchange = e => { loadFile(e.target.files[0]); e.target.value=''; };
+$('rot').onclick = () => { angle=(angle+90)%360; draw(); run(); };
+$('again').onclick = run;
+$('clear').onclick = () => { F.forEach(k=>$(k).value=''); $('raw').textContent='(아직 없음)'; };
+$('form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const c = read();
+  if(!c.name && !c.cell && !c.work && !c.email){ toast('이름이나 연락처를 하나 이상 넣어 주세요'); return; }
+  const ok = await deliver(vcard(c), (c.name||'contact')+'.vcf');
+  if(ok){ setHist([c, ...hist()]); toast('연락처 파일을 열어 [저장]을 누르면 등록됩니다'); }
+});
+renderHist();
+}
+</script>
+</body>
+</html>
